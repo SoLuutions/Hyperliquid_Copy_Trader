@@ -51,12 +51,15 @@ python src/main.py
 Edit the `.env` file:
 
 ```properties
-# Target wallet to copy
-TARGET_WALLET_ADDRESS=0x...
+# Hyperliquid API
+HYPERLIQUID_API_URL=https://api.hyperliquid.xyz
 
 # Your Hyperliquid credentials (leave empty for simulation)
 HYPERLIQUID_WALLET_ADDRESS=
 HYPERLIQUID_PRIVATE_KEY=
+
+# Target to copy (wallet or vault)
+TARGET_WALLET_ADDRESS=0x...
 
 # Trading mode
 SIMULATED_TRADING=true
@@ -64,8 +67,13 @@ SIMULATED_ACCOUNT_BALANCE=10000.0
 
 # Copy settings
 COPY_OPEN_POSITIONS=true
-LEVERAGE_ADJUSTMENT=1.0
+COPY_EXISTING_ORDERS=true
+AUTO_ADJUST_SIZE=true
 USE_LIMIT_ORDERS=false
+LEVERAGE_ADJUSTMENT=1.0
+MAX_OPEN_TRADES=x
+MAX_OPEN_ORDERS=x
+MAX_ACCOUNT_EQUITY=x
 
 # Asset Filters
 BLOCKED_ASSETS=BTC,ETH  # Comma-separated list (e.g., BTC,ETH,SOL)
@@ -73,7 +81,19 @@ BLOCKED_ASSETS=BTC,ETH  # Comma-separated list (e.g., BTC,ETH,SOL)
 # Telegram (optional)
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+
+# Database
+DATABASE_URL=sqlite:///./data/trading.db
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FILE=./logs/trading.log
 ```
+
+Notes:
+- `TARGET_WALLET_ADDRESS` accepts either a wallet address or a vault address.
+- `x` means unlimited; set an integer to cap `MAX_OPEN_TRADES`, `MAX_OPEN_ORDERS`, or `MAX_ACCOUNT_EQUITY`.
+- Hyperliquid enforces a $10 minimum notional per order. If your account is much smaller than the target, small fills will be skipped when the proportional size falls below $10. Increase balance or reduce the ratio gap to copy more trades.
 
 ## Leverage Adjustment
 
