@@ -188,7 +188,11 @@ class HyperliquidWebSocket:
                         logger.error(traceback.format_exc())
             
             if not callback_found:
-                logger.warning(f"⚠️ No callback found for channel: {channel}")
+                # subscriptionResponse is just a confirmation, not an error
+                if channel == "subscriptionResponse":
+                    logger.debug(f"✅ Subscription confirmed: {data.get('data', {})}")
+                else:
+                    logger.warning(f"⚠️ No callback found for channel: {channel}")
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse WebSocket message: {e}")

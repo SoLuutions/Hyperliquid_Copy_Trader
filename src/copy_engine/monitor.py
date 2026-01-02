@@ -1,9 +1,9 @@
 import asyncio
 from typing import Callable, Optional, List
 from loguru import logger
-from ..hyperliquid.client import HyperliquidClient
-from ..hyperliquid.websocket import HyperliquidWebSocket
-from ..hyperliquid.models import Position, Order, UserState, WebSocketUpdate
+from hyperliquid.client import HyperliquidClient
+from hyperliquid.websocket import HyperliquidWebSocket
+from hyperliquid.models import Position, Order, UserState, WebSocketUpdate
 
 
 class WalletMonitor:
@@ -107,7 +107,7 @@ class WalletMonitor:
             symbol = fill.get("coin", "").upper()
             
             # Check if asset is blocked
-            from ..config.settings import settings
+            from config.settings import settings
             if symbol in settings.copy_rules.blocked_assets:
                 logger.warning(f"⛔ BLOCKED ASSET - Ignoring fill for {symbol} (in blocked list)")
                 continue
@@ -127,7 +127,7 @@ class WalletMonitor:
         """Handle position updates"""
         logger.info(f"📍 Position update received: {len(positions)} positions")
         
-        from ..config.settings import settings
+        from config.settings import settings
         
         for pos_data in positions:
             # Parse position data

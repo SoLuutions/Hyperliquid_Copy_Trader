@@ -51,7 +51,7 @@ class RiskManagementConfig(BaseModel):
     stop_loss_pct: float = 5.0
 
 class Settings(BaseModel):
-    # Target wallet
+    # Target address to copy (wallet or vault - the bot treats them the same)
     target_wallet: str = "0x0ba5de43fa2419a25c2e680f84aff3a8f57fce22"
     
     # Trading mode

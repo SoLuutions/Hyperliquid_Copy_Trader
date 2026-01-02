@@ -5,8 +5,8 @@ from decimal import Decimal
 from eth_account import Account
 import aiohttp
 
-from ..utils.logger import logger
-from ..hyperliquid.models import OrderType, OrderSide
+from utils.logger import logger
+from hyperliquid.models import OrderType, OrderSide
 
 
 class TradeExecutor:
@@ -328,22 +328,36 @@ class TradeExecutor:
     async def close_position(
         self,
         symbol: str,
-        size: Decimal,
-        side: OrderSide
+        size: Optional[Decimal] = None,
+        side: Optional[OrderSide] = None
     ) -> Optional[str]:
         """Close a position using a market order
         
         Args:
             symbol: Trading symbol
-            size: Position size to close
-            side: Side to close (opposite of position side)
+            size: Position size to close (optional - will close full position)
+            side: Side to close (optional - opposite of current position)
             
         Returns:
             Order ID if successful, None otherwise
         """
         if self.dry_run:
-            logger.info(f"🔵 DRY RUN: Would close {side.value} {size} {symbol}")
+            if size and side:
+                logger.info(f"🔵 DRY RUN: Would close {side.value} {size} {symbol}")
+            else:
+                logger.info(f"🔵 DRY RUN: Would close position {symbol}")
             return f"dry_run_close_{symbol}_{int(time.time())}"
+        
+        # If size and side not provided, fetch current position to determine
+        if size is None or side is None:
+            logger.warning(f"⚠️ Size and/or side not provided for {symbol}, using reduce_only market order")
+            # Use a small market order with reduce_only flag to close whatever position exists
+            return await self.execute_market_order(
+                symbol=symbol,
+                side=OrderSide.SELL,  # Will be reduced regardless
+                size=Decimal("0.001"),  # Minimal size with reduce_only
+                reduce_only=True
+            )
         
         return await self.execute_market_order(
             symbol=symbol,

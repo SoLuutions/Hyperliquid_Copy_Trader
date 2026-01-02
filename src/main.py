@@ -12,6 +12,9 @@ from telegram_bot import TelegramBot, NotificationService
 # Setup logging
 setup_logger(settings.log_file, settings.log_level)
 
+# Hyperliquid minimum order size requirement
+MIN_POSITION_SIZE_USD = 10.0
+
 # Initialize components
 monitor: WalletMonitor = None
 executor: TradeExecutor = None
@@ -190,14 +193,22 @@ async def on_new_position(position_data: dict):
             settings.leverage.min_leverage
         )
         
-        logger.info(f"\n� Your Position:")
+        # Check minimum position size (Hyperliquid requirement)
+        your_position_value = your_size * entry_price
+        if your_position_value < MIN_POSITION_SIZE_USD:
+            logger.warning(f"\n⚠️  Skipping Position: {symbol}")
+            logger.warning(f"   Position value ${your_position_value:.2f} below Hyperliquid minimum ${MIN_POSITION_SIZE_USD:.2f}")
+            logger.success("=" * 60)
+            return
+        
+        logger.info(f"\nYour Position:")
         logger.info(f"   Size: {your_size:.4f} {symbol}")
         logger.info(f"   Notional: ${your_size * entry_price:,.2f}")
         logger.info(f"   Leverage: {your_leverage}x")
         logger.info(f"   Entry: ${entry_price:,.2f}")
         
         # Execute the trade
-        logger.info(f"\n🚀 Executing trade...")
+        logger.info(f"\nExecuting trade...")
         result = await executor.execute_market_order(
             symbol=symbol,
             side=side,
@@ -410,7 +421,7 @@ async def on_order_fill(fill_data: dict):
             position_side = PositionSide.LONG if side_str == "B" else PositionSide.SHORT
         
         logger.info(f"\n{'='*50}")
-        logger.info(f"📋 FILL TO COPY!")
+        logger.info(f"📋 FILL DETECTED!")
         logger.info(f"{'='*50}")
         logger.info(f"Symbol: {symbol}")
         logger.info(f"Side: {position_side.value.upper()}")
@@ -418,6 +429,19 @@ async def on_order_fill(fill_data: dict):
         logger.info(f"Target Order Type: {order_type}")
         logger.info(f"Target Size: {target_size}")
         logger.info(f"Price: ${price:,.4f}")
+        
+        # Check if this is a position OPEN/ADD or CLOSE/REDUCE
+        is_closing_reducing = "Close" in direction or "Reduce" in direction
+        
+        if is_closing_reducing:
+            logger.warning(f"⚠️ Target is CLOSING/REDUCING position - NOT copying")
+            logger.warning(f"   Reason: You likely don't have this position to close")
+            logger.warning(f"   Direction: {direction}")
+            return
+        
+        # Only copy if it's opening or adding to a position
+        if "Open" not in direction and "Add" not in direction:
+            logger.info(f"📌 Direction '{direction}' - Checking if this opens new position...")
         
         # Get target position to calculate our size
         target_position = None
@@ -428,19 +452,9 @@ async def on_order_fill(fill_data: dict):
                     break
         
         if not target_position:
-            logger.warning(f"⚠️ No position found for {symbol}, creating placeholder")
-            # Create a placeholder position for sizing calculation
-            from hyperliquid.models import Position
-            target_position = Position(
-                symbol=symbol,
-                size=target_size,
-                side=position_side,
-                entry_price=price,
-                current_price=price,
-                leverage=1.0,
-                unrealized_pnl=0.0,
-                liquidation_price=0.0
-            )
+            logger.warning(f"⚠️ No position found for {symbol} in target wallet")
+            logger.warning(f"   This fill doesn't create a new position - skipping")
+            return
         
         # Calculate our fill size
         our_size = position_sizer.calculate_size(
@@ -451,6 +465,13 @@ async def on_order_fill(fill_data: dict):
         
         if not our_size:
             logger.warning(f"⚠️ Skipping fill - size calculation returned None")
+            return
+        
+        # Check minimum position size (Hyperliquid requirement)
+        our_position_value = our_size * price
+        if our_position_value < MIN_POSITION_SIZE_USD:
+            logger.warning(f"\n⚠️  Skipping Fill: {symbol}")
+            logger.warning(f"   Position value ${our_position_value:.2f} below Hyperliquid minimum ${MIN_POSITION_SIZE_USD:.2f}")
             return
         
         logger.info(f"\n📊 Fill Sizing:")
@@ -772,22 +793,23 @@ async def main():
     else:
         logger.warning("⚠️ LIVE TRADING MODE - REAL MONEY AT RISK!")
     
-    target_wallet = settings.target_wallet
-    logger.info(f"📍 Target Wallet: {target_wallet}")
+    target_address = settings.target_wallet
+    logger.info(f"📍 Target Address: {target_address}")
     
     # Initialize components
     client = HyperliquidClient(settings.hyperliquid.api_url)
     
     monitor = WalletMonitor(
-        target_wallet,
+        target_address,
         settings.hyperliquid.api_url,
         settings.hyperliquid.ws_url
     )
     
     executor = TradeExecutor(
-        settings.hyperliquid.api_url,
-        settings.hyperliquid.wallet_address,
-        settings.hyperliquid.private_key,
+        wallet_address=settings.hyperliquid.wallet_address,
+        private_key=settings.hyperliquid.private_key,
+        info_url=settings.hyperliquid.api_url + "/info",
+        exchange_url=settings.hyperliquid.api_url + "/exchange",
         dry_run=True  # Always start in dry run mode for safety!
     )
     
@@ -812,6 +834,27 @@ async def main():
         logger.success(f"   Your Balance: ${simulated_balance:,.2f}")
         logger.success(f"   📊 Ratio: 1:{int(1/auto_ratio)} ({auto_ratio*100:.4f}%)")
         logger.success(f"   This means: For every ${int(1/auto_ratio)} target trades, you copy ${1}")
+        
+        # Calculate minimum balance needed for $10 minimum order size
+        if state.positions:
+            # Find smallest target position value
+            smallest_target_value = min(abs(pos.size) * pos.entry_price for pos in state.positions)
+            # Calculate minimum balance needed to copy at $10
+            min_balance_needed = MIN_POSITION_SIZE_USD * (target_balance / smallest_target_value)
+            
+            logger.info(f"\n⚠️  MINIMUM BALANCE CHECK:")
+            logger.info(f"   Hyperliquid Min Order Size: ${MIN_POSITION_SIZE_USD:.2f}")
+            logger.info(f"   Smallest Target Position: ${smallest_target_value:,.2f}")
+            logger.info(f"   Min Balance Needed (for this ratio): ${min_balance_needed:,.2f}")
+            
+            if simulated_balance < min_balance_needed:
+                positions_below_min = sum(1 for pos in state.positions 
+                                         if (abs(pos.size) * pos.entry_price * auto_ratio) < MIN_POSITION_SIZE_USD)
+                logger.warning(f"   ⚠️  WARNING: Your balance ${simulated_balance:,.2f} is below recommended minimum!")
+                logger.warning(f"   {positions_below_min} out of {len(state.positions)} positions will be SKIPPED (below $10)")
+                logger.warning(f"   Consider increasing balance to ${min_balance_needed:,.2f} to copy all positions")
+            else:
+                logger.success(f"   ✅ Your balance is sufficient to copy all positions!")
         
         if state.positions:
             logger.info(f"\n📊 Current Positions:")
@@ -883,6 +926,12 @@ async def main():
                     symbol=pos.symbol
                 )
                 margin_needed = your_position_value / your_leverage
+                
+                # Check minimum position size
+                if your_position_value < MIN_POSITION_SIZE_USD:
+                    logger.warning(f"\n⚠️  Skipping Position {i}/{len(state.positions)}: {pos.symbol}")
+                    logger.warning(f"   Position value ${your_position_value:.2f} below Hyperliquid minimum ${MIN_POSITION_SIZE_USD:.2f}")
+                    continue
                 
                 logger.info(f"\n📊 Copying Position {i}/{len(state.positions)}: {pos.symbol}")
                 logger.info(f"   Target: {pos.size:.4f} @ ${pos.entry_price:,.2f} ({pos.leverage}x)")
