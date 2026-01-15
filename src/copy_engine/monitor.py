@@ -102,6 +102,10 @@ class WalletMonitor:
     
     async def _handle_fills(self, fills: List[dict]):
         """Handle trade fills"""
+        # Refresh positions before processing fills to ensure we have up-to-date state
+        logger.debug("🔄 Refreshing position state before processing fills...")
+        await self.get_current_state()
+        
         for fill in fills:
             # Extract symbol from fill data
             symbol = fill.get("coin", "").upper()

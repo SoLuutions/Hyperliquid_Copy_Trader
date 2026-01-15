@@ -439,22 +439,56 @@ async def on_order_fill(fill_data: dict):
             logger.warning(f"   Direction: {direction}")
             return
         
-        # Only copy if it's opening or adding to a position
-        if "Open" not in direction and "Add" not in direction:
-            logger.info(f"📌 Direction '{direction}' - Checking if this opens new position...")
+        # Determine if this is a position-creating event
+        is_position_flip = ">" in direction  # e.g., "Short > Long" or "Long > Short"
+        is_opening = "Open" in direction or "Add" in direction
+        is_closing_only = "Close" in direction and not is_position_flip
+        
+        logger.info(f"📌 Direction analysis: '{direction}'")
+        logger.info(f"   - Position flip: {is_position_flip}")
+        logger.info(f"   - Opening/Adding: {is_opening}")
+        logger.info(f"   - Closing only: {is_closing_only}")
         
         # Get target position to calculate our size
         target_position = None
         if monitor.current_state:
+            logger.debug(f"📊 Current cached positions: {len(monitor.current_state.positions)}")
             for pos in monitor.current_state.positions:
+                logger.debug(f"   - {pos.symbol}: size={pos.size}")
                 if pos.symbol == symbol:
                     target_position = pos
                     break
         
-        if not target_position:
+        # If no position found and this is a closing-only trade, skip it
+        if not target_position and is_closing_only:
             logger.warning(f"⚠️ No position found for {symbol} in target wallet")
-            logger.warning(f"   This fill doesn't create a new position - skipping")
+            logger.warning(f"   This appears to be a closing-only trade - skipping")
             return
+        
+        # If no position found but this is a flip or opening trade, retry after delay
+        if not target_position and (is_position_flip or is_opening):
+            logger.warning(f"⚠️ No position found for {symbol} - may be timing issue")
+            logger.info(f"⏱️  Waiting 1.5 seconds and retrying position query...")
+            
+            # Wait for exchange to update
+            await asyncio.sleep(1.5)
+            
+            # Refresh state
+            await monitor.get_current_state()
+            
+            # Retry finding position
+            if monitor.current_state:
+                for pos in monitor.current_state.positions:
+                    if pos.symbol == symbol:
+                        target_position = pos
+                        logger.success(f"✅ Position found after retry: {symbol}")
+                        break
+            
+            if not target_position:
+                logger.error(f"❌ Still no position found for {symbol} after retry")
+                logger.error(f"   Direction: {direction}")
+                logger.error(f"   This may indicate an exchange delay or position was immediately closed")
+                return
         
         # Calculate our fill size
         our_size = position_sizer.calculate_size(
