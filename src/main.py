@@ -842,10 +842,9 @@ async def main():
     )
     
     executor = TradeExecutor(
-        wallet_address=settings.hyperliquid.wallet_address,
-        private_key=settings.hyperliquid.private_key,
-        info_url=settings.hyperliquid.api_url + "/info",
-        exchange_url=settings.hyperliquid.api_url + "/exchange",
+        executor_address=settings.hyperliquid.wallet_address,
+        api_key=settings.hyperliquid.private_key,
+        is_mainnet=("testnet" not in settings.hyperliquid.api_url.lower()),
         dry_run=settings.simulated_trading  # Follow user setting for live/sim
     )
     executor.client = client
@@ -853,11 +852,11 @@ async def main():
     if not settings.simulated_trading:
         logger.info(f"\n📊 Fetching your LIVE wallet balance for ratio verification...")
         try:
-            executor_state = await executor.client.get_user_state(executor.wallet_address)
+            executor_state = await executor.client.get_user_state(executor.executor_address)
             if executor_state and getattr(executor_state, 'balance', 0) > 0:
                 simulated_balance = executor_state.balance
             else:
-                logger.warning(f"⚠️ Your LIVE wallet {executor.wallet_address} has $0 balance.")
+                logger.warning(f"⚠️ Your LIVE wallet {executor.executor_address} has $0 balance.")
                 logger.warning("Bot is continuing in CONNECTIVITY TEST mode ($0 balance). Orders will likely fail.")
                 simulated_balance = 0.0
         except Exception as e:

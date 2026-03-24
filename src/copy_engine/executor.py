@@ -14,10 +14,9 @@ class TradeExecutor:
     
     def __init__(
         self,
-        wallet_address: str,
-        private_key: str,
-        info_url: str = "https://api.hyperliquid.xyz/info",
-        exchange_url: str = "https://api.hyperliquid.xyz/exchange",
+        executor_address: str,
+        api_key: str,
+        is_mainnet: bool = True,
         dry_run: bool = True
     ):
         """Initialize trade executor
