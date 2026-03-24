@@ -1149,8 +1149,30 @@ async def main():
                 leverage_adjustment=settings.leverage.adjustment_ratio
             )
         
-        # Start monitoring
-        await monitor.start_monitoring()
+        # Start monitoring in background
+        asyncio.create_task(monitor.start_monitoring())
+        
+        # Start FastAPI web server on the main thread
+        import uvicorn
+        from web_server import app
+        import os
+        
+        # Inject state into FastAPI
+        app.state.simulated_trading = settings.simulated_trading
+        app.state.monitor = monitor
+        app.state.status = "ACTIVE"
+        app.state.get_uptime = lambda: (datetime.now() - bot_start_time).total_seconds()
+        app.state.target_wallet = settings.target_wallet
+        app.state.get_trades_count = lambda: trades_copied_count
+        app.state.get_simulated_balance = lambda: simulated_balance
+        app.state.get_simulated_pnl = lambda: simulated_pnl
+        app.state.get_simulated_positions = lambda: simulated_positions
+        
+        port = int(os.environ.get("PORT", 8081))
+        logger.info(f"🌐 Starting Web GUI on port {port}...")
+        config = uvicorn.Config(app, host="0.0.0.0", port=port, loop="asyncio", log_level="warning")
+        server = uvicorn.Server(config)
+        await server.serve()
         
     except KeyboardInterrupt:
         logger.info("\n⚠️ Shutdown signal received...")
