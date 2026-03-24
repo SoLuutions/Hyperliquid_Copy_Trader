@@ -495,7 +495,9 @@ async def on_order_fill(fill_data: dict):
         our_size = position_sizer.calculate_size(
             target_position=target_position,
             target_wallet_balance=monitor.current_state.balance if monitor.current_state else 1000000,
-            your_wallet_balance=simulated_balance if settings.simulated_trading else (monitor.current_state.balance if monitor.current_state else 10000)
+            your_wallet_balance=simulated_balance if settings.simulated_trading else (monitor.current_state.balance if monitor.current_state else 10000),
+            provided_entry_price=price,
+            target_size=target_size
         )
         
         if not our_size:

@@ -25,6 +25,7 @@ class WalletMonitor:
         self.current_state: Optional[UserState] = None
         self.last_positions: List[Position] = []
         self.last_orders: List[Order] = []
+        self.coin_map: Dict[str, str] = {}  # Map "@107" -> "HYPE"
         
         # Callbacks
         self.on_new_position: Optional[Callable] = None
@@ -54,6 +55,9 @@ class WalletMonitor:
         # Get initial state
         await self.get_current_state()
         
+        # Load asset metadata for ID resolution
+        await self._load_coin_map()
+        
         # Connect WebSocket
         await self.ws.connect()
         
@@ -67,6 +71,32 @@ class WalletMonitor:
         """Stop monitoring"""
         logger.info("Stopping wallet monitoring")
         await self.ws.stop()
+        
+    async def _load_coin_map(self):
+        """Fetch universe metadata to map asset IDs to symbols"""
+        try:
+            async with self.client:
+                universe = await self.client.get_all_assets()
+                for i, asset in enumerate(universe):
+                    symbol = asset.get("name", "").upper()
+                    if symbol:
+                        self.coin_map[f"@{i}"] = symbol
+                logger.info(f"✅ Loaded mapping for {len(self.coin_map)} assets")
+        except Exception as e:
+            logger.error(f"Failed to load coin map: {e}")
+
+    def _resolve_symbol(self, coin: str) -> str:
+        """Resolve a coin name (possibly an ID like @107) to ticker symbol"""
+        if not coin:
+            return ""
+        
+        # Check mapping
+        if coin.startswith("@") and coin in self.coin_map:
+            resolved = self.coin_map[coin]
+            logger.debug(f"Resolved asset ID {coin} -> {resolved}")
+            return resolved
+            
+        return coin.upper()
     
     async def _handle_update(self, update: WebSocketUpdate):
         """Handle WebSocket updates from target wallet"""
@@ -107,8 +137,9 @@ class WalletMonitor:
         await self.get_current_state()
         
         for fill in fills:
-            # Extract symbol from fill data
-            symbol = fill.get("coin", "").upper()
+            # Extract and resolve symbol
+            raw_coin = fill.get("coin", "")
+            symbol = self._resolve_symbol(raw_coin)
             
             # Check if asset is blocked or allowed
             from config.settings import settings
@@ -139,7 +170,8 @@ class WalletMonitor:
         
         for pos_data in positions:
             # Parse position data
-            symbol = pos_data.get("coin", "").upper()
+            raw_coin = pos_data.get("coin", "")
+            symbol = self._resolve_symbol(raw_coin)
             size = float(pos_data.get("szi", 0))
             
             # Check if asset is blocked or allowed
@@ -202,7 +234,8 @@ class WalletMonitor:
         
         for order_data in orders:
             order_id = str(order_data.get("oid", ""))
-            symbol = order_data.get("coin", "").upper()
+            raw_coin = order_data.get("coin", "")
+            symbol = self._resolve_symbol(raw_coin)
             
             # Check if asset is blocked or allowed
             from config.settings import settings
