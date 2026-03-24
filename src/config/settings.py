@@ -92,7 +92,7 @@ class Settings(BaseModel):
         settings.simulated_trading = sim_trading in ('true', '1', 'yes')
         
         sim_balance = os.getenv('SIMULATED_ACCOUNT_BALANCE', '1000.0')
-        settings.simulated_account_balance = float(sim_balance)
+        settings.simulated_account_balance = float(sim_balance) if sim_balance else 1000.0
         
         # Copy trading settings
         copy_open_pos = os.getenv('COPY_OPEN_POSITIONS', 'true').lower()
@@ -109,16 +109,16 @@ class Settings(BaseModel):
         
         # Leverage adjustment
         leverage_adj = os.getenv('LEVERAGE_ADJUSTMENT', '0.5')
-        settings.leverage.adjustment_ratio = float(leverage_adj)
+        settings.leverage.adjustment_ratio = float(leverage_adj) if leverage_adj else 0.5
         
         max_trades = os.getenv('MAX_OPEN_TRADES', 'x')
-        settings.copy_rules.max_open_trades = None if max_trades.lower() == 'x' else int(max_trades)
+        settings.copy_rules.max_open_trades = None if not max_trades or max_trades.lower() == 'x' else int(max_trades)
         
         max_orders = os.getenv('MAX_OPEN_ORDERS', 'x')
-        settings.copy_rules.max_open_orders = None if max_orders.lower() == 'x' else int(max_orders)
+        settings.copy_rules.max_open_orders = None if not max_orders or max_orders.lower() == 'x' else int(max_orders)
         
         max_equity = os.getenv('MAX_ACCOUNT_EQUITY', 'x')
-        settings.copy_rules.max_account_equity = None if max_equity.lower() == 'x' else float(max_equity)
+        settings.copy_rules.max_account_equity = None if not max_equity or max_equity.lower() == 'x' else float(max_equity)
         
         # Blocked assets
         blocked = os.getenv('BLOCKED_ASSETS', '')
