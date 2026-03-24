@@ -49,23 +49,125 @@ class WalletMonitor:
             return self.current_state
     
     async def start_monitoring(self):
-        """Start monitoring the target wallet"""
+        """Start monitoring the target wallet using both WebSocket and REST polling."""
         logger.info(f"Starting monitoring for {self.target_address}")
-        
+
         # Get initial state
         await self.get_current_state()
-        
+
         # Load asset metadata for ID resolution
         await self._load_coin_map()
-        
-        # Connect WebSocket
+
+        # Connect WebSocket and subscribe
         await self.ws.connect()
-        
-        # Subscribe to user updates
         await self.ws.subscribe_user(self.target_address, self._handle_update)
-        
-        # Start listening
-        await self.ws.listen()
+
+        # Run WebSocket listener AND REST polling loop concurrently.
+        # Polling is the safety net: it detects position changes even when
+        # the target only places/cancels limit orders (no fill event fires).
+        logger.info("🔄 Starting dual monitoring: WebSocket + REST polling every 10s")
+        await asyncio.gather(
+            self.ws.listen(),
+            self._poll_loop(),
+        )
+
+    async def _poll_loop(self, interval: int = 10):
+        """
+        Poll the REST API every `interval` seconds and compare positions
+        against the last known state. Fires the same callbacks as the
+        WebSocket handler so copy trades are executed either way.
+        """
+        logger.info(f"📡 REST polling started (every {interval}s)")
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                prev_positions = {p.symbol: p for p in (self.last_positions or [])}
+
+                # Fetch fresh state
+                await self.get_current_state()
+                if not self.current_state:
+                    continue
+
+                curr_positions = {p.symbol: p for p in self.current_state.positions}
+
+                from config.settings import settings
+
+                for symbol, pos in curr_positions.items():
+                    # Resolve symbol (in case it's an @id)
+                    resolved = self._resolve_symbol(symbol)
+
+                    # Apply asset filters
+                    if settings.copy_rules.blocked_assets and resolved in settings.copy_rules.blocked_assets:
+                        continue
+                    if settings.copy_rules.allowed_assets and resolved not in settings.copy_rules.allowed_assets:
+                        continue
+
+                    prev = prev_positions.get(symbol)
+
+                    # Build a minimal fill-style dict for the callback
+                    size = pos.size if pos.side.value == "long" else -pos.size
+                    fill_dict = {
+                        "coin": resolved,
+                        "side": "B" if pos.side.value == "long" else "S",
+                        "sz": str(abs(pos.size)),
+                        "px": str(pos.entry_price),
+                        "dir": "Open Long" if pos.side.value == "long" else "Open Short",
+                        "crossed": False,
+                        "_source": "polling",
+                    }
+
+                    if prev is None and abs(size) > 0:
+                        # Brand-new position detected by polling
+                        logger.success(f"📡 POLL: NEW position detected: {resolved} {pos.side.value.upper()} {pos.size}")
+                        if self.on_order_fill:
+                            try:
+                                if asyncio.iscoroutinefunction(self.on_order_fill):
+                                    await self.on_order_fill(fill_dict)
+                                else:
+                                    self.on_order_fill(fill_dict)
+                            except Exception as e:
+                                logger.error(f"Poll callback error: {e}")
+
+                    elif prev and abs(abs(pos.size) - abs(prev.size)) > 1e-8:
+                        # Position size changed (add or partial close)
+                        is_add = abs(pos.size) > abs(prev.size)
+                        if is_add:
+                            logger.info(f"📡 POLL: Position ADDED: {resolved} {prev.size} → {pos.size}")
+                            fill_dict["dir"] = "Add Long" if pos.side.value == "long" else "Add Short"
+                            if self.on_order_fill:
+                                try:
+                                    delta = abs(pos.size) - abs(prev.size)
+                                    fill_dict["sz"] = str(delta)
+                                    if asyncio.iscoroutinefunction(self.on_order_fill):
+                                        await self.on_order_fill(fill_dict)
+                                    else:
+                                        self.on_order_fill(fill_dict)
+                                except Exception as e:
+                                    logger.error(f"Poll callback error: {e}")
+
+                # Detect closed positions
+                for symbol, prev in prev_positions.items():
+                    if symbol not in curr_positions:
+                        resolved = self._resolve_symbol(symbol)
+                        logger.info(f"📡 POLL: Position CLOSED: {resolved}")
+                        pos_dict = {"coin": resolved, "szi": "0"}
+                        if self.on_position_close:
+                            try:
+                                if asyncio.iscoroutinefunction(self.on_position_close):
+                                    await self.on_position_close(pos_dict)
+                                else:
+                                    self.on_position_close(pos_dict)
+                            except Exception as e:
+                                logger.error(f"Poll close callback error: {e}")
+
+                # Update last_positions after comparison
+                self.last_positions = list(self.current_state.positions)
+                logger.debug(f"📡 Poll tick: {len(curr_positions)} open positions")
+
+            except Exception as e:
+                logger.error(f"Error in poll loop: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
     
     async def stop_monitoring(self):
         """Stop monitoring"""
