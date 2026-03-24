@@ -40,13 +40,13 @@ class TradeExecutor:
         if self.private_key and not self.dry_run:
             try:
                 self.account = Account.from_key(self.private_key)
-                # Validate address matches
-                if self.account.address.lower() != self.wallet_address:
-                    raise ValueError(
-                        f"Private key address {self.account.address} doesn't match "
-                        f"configured address {self.wallet_address}"
-                    )
-                logger.info(f"✅ Executor initialized for wallet {self.wallet_address}")
+                signing_address = self.account.address
+                # API wallet (agent key) signing is ALLOWED on Hyperliquid.
+                # The key address may differ from the main wallet address — that's intentional.
+                if signing_address.lower() == self.wallet_address:
+                    logger.info(f"✅ Executor initialized for wallet {self.wallet_address}")
+                else:
+                    logger.info(f"✅ Executor initialized — Main: {self.wallet_address} | API Key: {signing_address}")
             except Exception as e:
                 logger.error(f"Failed to initialize signing account: {e}")
                 raise
