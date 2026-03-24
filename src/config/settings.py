@@ -19,11 +19,11 @@ class TelegramConfig(BaseModel):
     report_interval_hours: int = 1
 
 class SizingConfig(BaseModel):
-    mode: str = "proportional"  # "fixed" or "proportional"
-    fixed_size: float = 100.0
-    portfolio_ratio: float = 0.01  # 1:100 ratio
-    max_position_size: float = 1000.0
-    max_total_exposure: float = 5000.0
+    mode: str = "fixed"          # "fixed" or "proportional"
+    fixed_size: float = 4.0      # USD per trade ($3-$5 range for $30 capital)
+    portfolio_ratio: float = 0.01
+    max_position_size: float = 5.0    # hard cap per trade
+    max_total_exposure: float = 30.0  # matches $30 capital
 
 class LeverageConfig(BaseModel):
     adjustment_ratio: float = 0.5
@@ -106,6 +106,19 @@ class Settings(BaseModel):
         use_limit = os.getenv('USE_LIMIT_ORDERS', 'false').lower()
         settings.copy_rules.use_limit_orders = use_limit in ('true', '1', 'yes')
         
+        # Sizing settings
+        sizing_mode = os.getenv('SIZING_MODE', 'fixed')
+        settings.sizing.mode = sizing_mode
+
+        fixed_sz = os.getenv('FIXED_TRADE_SIZE', '4.0')
+        settings.sizing.fixed_size = float(fixed_sz) if fixed_sz else 4.0
+
+        max_pos = os.getenv('MAX_POSITION_SIZE', '5.0')
+        settings.sizing.max_position_size = float(max_pos) if max_pos else 5.0
+
+        max_exp = os.getenv('MAX_TOTAL_EXPOSURE', '30.0')
+        settings.sizing.max_total_exposure = float(max_exp) if max_exp else 30.0
+
         # Leverage adjustment
         leverage_adj = os.getenv('LEVERAGE_ADJUSTMENT', '0.5')
         settings.leverage.adjustment_ratio = float(leverage_adj) if leverage_adj else 0.5
