@@ -23,39 +23,62 @@ class TradeExecutor:
         """Initialize trade executor
         
         Args:
-            wallet_address: Hyperliquid wallet address
-            private_key: Private key for signing transactions
-            info_url: Hyperliquid info API URL
-            exchange_url: Hyperliquid exchange API URL
+            executor_address: Hyperliquid wallet address (main wallet)
+            api_key: Private key for signing transactions (agent key)
+            is_mainnet: If True, use mainnet URLs. If False, use testnet URLs.
             dry_run: If True, simulate orders without executing
         """
-        self.wallet_address = wallet_address.lower() if wallet_address else None
-        self.private_key = private_key
-        self.info_url = info_url
-        self.exchange_url = exchange_url
+        self.executor_address = executor_address.lower() if executor_address else None
+        self.api_key = api_key
+        self.is_mainnet = is_mainnet
         self.dry_run = dry_run
+        self.coin_to_index = {}  # Map "HYPE" -> 107
         
-        # Initialize signing account if we have credentials
+        # Determine URLs
+        self.api_url = "https://api.hyperliquid.xyz" if is_mainnet else "https://api.hyperliquid-testnet.xyz"
+        self.exchange_url = f"{self.api_url}/exchange"
+        
+        # Initialize client and account
+        from hyperliquid.client import HyperliquidClient
+        self.client = HyperliquidClient(self.api_url)
+        
         self.account = None
-        if self.private_key and not self.dry_run:
+        if self.api_key and not self.dry_run:
             try:
-                self.account = Account.from_key(self.private_key)
+                self.account = Account.from_key(self.api_key)
                 signing_address = self.account.address
                 # API wallet (agent key) signing is ALLOWED on Hyperliquid.
                 # The key address may differ from the main wallet address — that's intentional.
-                if signing_address.lower() == self.wallet_address:
-                    logger.info(f"✅ Executor initialized for wallet {self.wallet_address}")
+                if signing_address.lower() == self.executor_address:
+                    logger.info(f"✅ Executor initialized for wallet {self.executor_address}")
                 else:
-                    logger.info(f"✅ Executor initialized — Main: {self.wallet_address} | API Key: {signing_address}")
+                    logger.info(f"✅ Executor initialized — Main: {self.executor_address} | API Key: {signing_address}")
             except Exception as e:
                 logger.error(f"Failed to initialize signing account: {e}")
                 raise
         elif not self.dry_run:
-            raise ValueError("Cannot run in live mode without private key")
+            raise ValueError("Cannot run in live mode without API key")
         else:
             logger.warning("⚠️ Running in DRY RUN mode - no real trades will be executed")
+
+        # Load asset mapping asynchronously
+        if not self.dry_run:
+            asyncio.create_task(self._load_coin_map())
     
-    def _sign_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+    async def _load_coin_map(self):
+        """Fetch universe metadata to map symbols to asset IDs"""
+        try:
+            async with self.client:
+                universe = await self.client.get_all_assets()
+                for i, asset in enumerate(universe):
+                    name = asset.get("name", "").upper()
+                    if name:
+                        self.coin_to_index[name] = i
+                logger.info(f"✅ Executor loaded {len(self.coin_to_index)} asset indices")
+        except Exception as e:
+            logger.error(f"Executor failed to load coin map: {e}")
+
+    def _sign_action(self, action: dict) -> Dict[str, Any]:
         """Sign an action using EIP-712 structured data signing
         
         Args:
@@ -136,9 +159,12 @@ class TradeExecutor:
             True if successful, False otherwise
         """
         try:
+            # Resolve symbol to index
+            asset_index = self.coin_to_index.get(symbol.upper(), symbol)
+            
             action = {
                 "type": "updateLeverage",
-                "asset": symbol,          # coin ticker, e.g. "BTC"
+                "asset": asset_index,      # Use index if available
                 "isCross": is_cross,
                 "leverage": int(leverage)  # must be integer
             }
@@ -198,12 +224,15 @@ class TradeExecutor:
             if leverage > 1:
                 await self._update_leverage(symbol, leverage)
             
+            # Resolve symbol to index
+            asset_index = self.coin_to_index.get(symbol.upper(), symbol)
+            
             # Create market order action
-            # Hyperliquid wire format: a=coin, b=isBuy, p=price, s=size, r=reduceOnly, t=orderType
+            # Hyperliquid wire format: a=asset_index, b=isBuy, p=price, s=size, r=reduceOnly, t=orderType
             action = {
                 "type": "order",
                 "orders": [{
-                    "a": symbol,
+                    "a": asset_index,
                     "b": side == OrderSide.BUY,
                     "p": "0",  # 0 = market order price (IOC)
                     "s": str(round(float(size), 8)),

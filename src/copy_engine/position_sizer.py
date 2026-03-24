@@ -77,7 +77,7 @@ class PositionSizer:
             Position size to trade, or None if should skip
         """
         if self.mode == "proportional":
-            size = self._calculate_proportional_size(
+            size_usd = self._calculate_proportional_size(
                 target_position,
                 target_wallet_balance,
                 your_wallet_balance,
@@ -85,22 +85,35 @@ class PositionSizer:
                 target_size=target_size
             )
         else:  # fixed mode
-            size = self._calculate_fixed_size(
-                target_position,
-                provided_entry_price=provided_entry_price
-            )
-        
-        # Apply maximum position size limit
-        if size and size > self.max_position_size:
-            logger.warning(f"Position size ${size:.2f} exceeds max ${self.max_position_size:.2f}, capping")
-            size = self.max_position_size
-        
-        # Check total exposure limit
-        if size and (your_current_exposure + size) > self.max_total_exposure:
-            logger.error(f"Would exceed max exposure: ${your_current_exposure + size:.2f} > ${self.max_total_exposure:.2f}")
+            size_usd = self.fixed_size
+            
+        if not size_usd:
             return None
+            
+        # Apply maximum position size limit (USD)
+        if size_usd > self.max_position_size:
+            logger.warning(f"Position size ${size_usd:.2f} exceeds max ${self.max_position_size:.2f}, capping")
+            size_usd = self.max_position_size
         
-        return size
+        # Check total exposure limit (USD)
+        if (your_current_exposure + size_usd) > self.max_total_exposure:
+            logger.error(f"Would exceed max exposure: ${your_current_exposure + size_usd:.2f} > ${self.max_total_exposure:.2f}")
+            return None
+            
+        # Convert USD to coins for the executor
+        entry_price = target_position.entry_price if target_position else provided_entry_price
+        if not entry_price or entry_price <= 0:
+            logger.warning("Could not convert size to coins: missing entry price")
+            return None
+            
+        your_size = size_usd / entry_price
+        
+        symbol = target_position.symbol if target_position else "Unknown"
+        logger.info(
+            f"Sizing ({self.mode}): ${size_usd:.2f} = {your_size:.4f} {symbol}"
+        )
+        
+        return your_size
     
     def _calculate_proportional_size(
         self,
@@ -111,14 +124,13 @@ class PositionSizer:
         target_size: Optional[float] = None
     ) -> Optional[float]:
         """
-        Calculate proportional size based on portfolio ratio
+        Calculate proportional size in USD
         """
         # Get entry price and size from position or fallbacks
         entry_price = target_position.entry_price if target_position else provided_entry_price
         size = target_position.size if target_position else target_size
         
         if entry_price is None or size is None or entry_price <= 0:
-            logger.warning("Could not calculate proportional size: missing entry price or target size")
             return None
             
         # Calculate target position notional value
@@ -130,41 +142,11 @@ class PositionSizer:
         else:
             wallet_ratio = self.portfolio_ratio
         
-        # Calculate your position size
+        # Calculate your position size in USD
         your_notional = target_notional * wallet_ratio
         
-        # Convert back to size (coins)
-        your_size = your_notional / entry_price
-        
-        logger.info(
-            f"Proportional sizing: Target ${target_notional:.2f} -> Your ${your_notional:.2f} "
-            f"({wallet_ratio:.4f} ratio) = {your_size:.4f} coins"
-        )
-        
-        return your_size
+        return your_notional
     
-    def _calculate_fixed_size(
-        self, 
-        target_position: Optional[Position],
-        provided_entry_price: Optional[float] = None
-    ) -> Optional[float]:
-        """
-        Calculate fixed size regardless of target position size
-        """
-        entry_price = target_position.entry_price if target_position else provided_entry_price
-        
-        if not entry_price or entry_price <= 0:
-            logger.warning("Could not calculate fixed size: missing entry price")
-            return None
-            
-        your_size = self.fixed_size / entry_price
-        
-        symbol = target_position.symbol if target_position else "Unknown"
-        logger.info(
-            f"Fixed sizing: ${self.fixed_size:.2f} = {your_size:.4f} {symbol}"
-        )
-        
-        return your_size
 
     
     def calculate_leverage(

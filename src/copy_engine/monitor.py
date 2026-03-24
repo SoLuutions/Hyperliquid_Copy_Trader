@@ -81,6 +81,14 @@ class WalletMonitor:
                     symbol = asset.get("name", "").upper()
                     if symbol:
                         self.coin_map[f"@{i}"] = symbol
+                
+                # Verify HYPE specifically
+                hype_id = next((k for k, v in self.coin_map.items() if v == "HYPE"), None)
+                if hype_id:
+                    logger.info(f"✅ HYPE resolved to ID {hype_id}")
+                else:
+                    logger.warning("⚠️ HYPE not found in universe metadata!")
+                    
                 logger.info(f"✅ Loaded mapping for {len(self.coin_map)} assets")
         except Exception as e:
             logger.error(f"Failed to load coin map: {e}")
