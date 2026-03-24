@@ -66,18 +66,29 @@ class HyperliquidClient:
                         size = float(position.get("szi", 0))
                         side = PositionSide.LONG if size > 0 else PositionSide.SHORT
                         
+                        # "coin" lives inside position{}, NOT in the outer pos_data wrapper
+                        coin = position.get("coin", "") or pos_data.get("coin", "")
+                        # markPx = current mark price; fall back to positionValue/size if missing
+                        mark_px = position.get("markPx")
+                        if mark_px is not None:
+                            current_price = float(mark_px)
+                        elif size != 0:
+                            current_price = float(position.get("positionValue", 0)) / abs(size)
+                        else:
+                            current_price = 0.0
+
                         positions.append(Position(
-                            symbol=pos_data.get("coin", ""),
+                            symbol=coin,
                             side=side,
                             size=abs(size),
                             entry_price=float(position.get("entryPx", 0)),
-                            current_price=float(position.get("positionValue", 0)) / abs(size) if size != 0 else 0,
+                            current_price=current_price,
                             leverage=float(position.get("leverage", {}).get("value", 1)),
                             unrealized_pnl=float(position.get("unrealizedPnl", 0)),
                             liquidation_price=float(position.get("liquidationPx")) if position.get("liquidationPx") else None,
                             margin=float(position.get("marginUsed", 0))
                         ))
-                        logger.debug(f"  Position: {pos_data.get('coin')} unrealizedPnl={position.get('unrealizedPnl', 0)}")
+                        logger.debug(f"  Position: {coin} unrealizedPnl={position.get('unrealizedPnl', 0)}")
             
             # Parse orders
             orders = []
