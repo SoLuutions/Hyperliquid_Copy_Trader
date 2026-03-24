@@ -6,6 +6,12 @@ from loguru import logger
 # Global log buffer for Web UI
 log_buffer = collections.deque(maxlen=200)
 
+# Add custom levels
+try:
+    logger.level("TRACK", no=21, color="<magenta>", icon="🐋")
+except ValueError:
+    pass # Already exists
+
 def custom_sink(message):
     log_buffer.append(message.strip())
 

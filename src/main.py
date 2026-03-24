@@ -843,7 +843,7 @@ async def main():
         private_key=settings.hyperliquid.private_key,
         info_url=settings.hyperliquid.api_url + "/info",
         exchange_url=settings.hyperliquid.api_url + "/exchange",
-        dry_run=True  # Always start in dry run mode for safety!
+        dry_run=settings.simulated_trading  # Follow user setting for live/sim
     )
     executor.client = client
     
@@ -854,10 +854,9 @@ async def main():
             if executor_state and getattr(executor_state, 'balance', 0) > 0:
                 simulated_balance = executor_state.balance
             else:
-                logger.error(f"❌ Your LIVE wallet {executor.wallet_address} has $0 balance or is invalid!")
-                logger.error("You must deposit USDC to your Hyperliquid account to trade live.")
-                import sys
-                sys.exit(1)
+                logger.warning(f"⚠️ Your LIVE wallet {executor.wallet_address} has $0 balance.")
+                logger.warning("Bot is continuing in CONNECTIVITY TEST mode ($0 balance). Orders will likely fail.")
+                simulated_balance = 0.0
         except Exception as e:
             logger.error(f"❌ Failed to fetch your live wallet balance: {e}")
             import sys
@@ -874,12 +873,15 @@ async def main():
         
     state = await monitor.get_current_state()
     
-    if not state or getattr(state, 'balance', 0) <= 0:
-        logger.error(f"❌ Target wallet {target_address} returned invalid data or $0 balance!")
-        logger.error("Cannot calculate copy ratios safely. The wallet might be invalid, empty, or the Hyperliquid API is unreachable.")
-        logger.error("Bot will exit to protect your funds.")
+    if not state:
+        logger.error(f"❌ Target wallet {target_address} returned invalid data!")
+        logger.error("Hyperliquid API might be unreachable. Bot will exit to protect your funds.")
         import sys
         sys.exit(1)
+        
+    if getattr(state, 'balance', 0) <= 0:
+        logger.warning(f"⚠️ Target wallet {target_address} has $0 balance.")
+        logger.warning("Bot will stay connected but no copy ratios can be calculated until the whale deposits.")
         
     target_balance = state.balance
     logger.info(f"\n💼 Target Account Validated:")

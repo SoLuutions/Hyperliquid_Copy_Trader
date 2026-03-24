@@ -113,7 +113,7 @@ class WalletMonitor:
             # Check if asset is allowed
             from config.settings import settings
             if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
-                logger.warning(f"⛔ ALLOWED LIST ONLY - Ignoring fill for {symbol} (not in allowed list)")
+                logger.log("TRACK", f"🐋 Target traded {symbol} (Skipped: Not in allowed list)")
                 continue
             
             logger.success(f"🎯 FILL DETECTED: {fill}")
@@ -140,7 +140,7 @@ class WalletMonitor:
             
             # Check if asset is allowed
             if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
-                logger.debug(f"⛔ Ignoring position update for non-whitelisted asset: {symbol}")
+                logger.log("TRACK", f"🐋 Target position update: {symbol} (Skipped: Not in allowed list)")
                 continue
             
             # Check if this is a new position

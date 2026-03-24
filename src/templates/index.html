@@ -303,6 +303,7 @@
         .log-level-warning { color: #ffd700; font-weight: bold; }
         .log-level-error { color: var(--neon-red); font-weight: bold; }
         .log-level-success { color: var(--neon-green); font-weight: bold; }
+        .log-level-track { color: #f0f; font-weight: bold; }
         
         .view-section {
             display: none;
@@ -497,7 +498,8 @@
                         .replace(/\| (INFO\s*)\|/, '| <span class="log-level-info">$1</span>|')
                         .replace(/\| (WARNING\s*)\|/, '| <span class="log-level-warning">$1</span>|')
                         .replace(/\| (ERROR\s*)\|/, '| <span class="log-level-error">$1</span>|')
-                        .replace(/\| (SUCCESS\s*)\|/, '| <span class="log-level-success">$1</span>|');
+                        .replace(/\| (SUCCESS\s*)\|/, '| <span class="log-level-success">$1</span>|')
+                        .replace(/\| (TRACK\s*)\|/, '| <span class="log-level-track">$1</span>|');
                     
                     html += `<div>${formatted}</div>`;
                 });
