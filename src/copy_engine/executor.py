@@ -10,6 +10,8 @@ import aiohttp
 
 from utils.logger import logger
 from hyperliquid.models import OrderType, OrderSide
+from utils.database import DatabaseManager
+from config.settings import settings
 
 
 def _float_to_wire(x: float) -> str:
@@ -99,6 +101,9 @@ class TradeExecutor:
 
         # coin ticker → integer asset index (populated lazily on first use)
         self.coin_index: Dict[str, int] = {}
+        
+        # Initialize database
+        self.db = DatabaseManager(settings.database_url)
 
         self.account = None
         if self.private_key and not self.dry_run:
@@ -252,7 +257,22 @@ class TradeExecutor:
                                     return None
                                 else:
                                     oid = "executed"
+                                
                                 logger.success(f"✅ Market {side.value} {symbol} size={size} leverage={leverage}x → {oid}")
+                                
+                                # Save to DB
+                                try:
+                                    self.db.add_trade(
+                                        symbol=symbol,
+                                        side=side.value.upper(),
+                                        size=float(size),
+                                        price=float(result.get("response", {}).get("data", {}).get("avgPx", 0)) or 0.0,
+                                        leverage=leverage,
+                                        source="live_market"
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to save market trade to DB: {e}")
+                                    
                                 return oid
                         logger.error(f"Order rejected: {result}")
                         return None
@@ -320,7 +340,18 @@ class TradeExecutor:
                                     return oid
                                 elif "filled" in status:
                                     oid = str(status["filled"].get("oid", "filled"))
+                                    px = float(status["filled"].get("avgPx", price))
                                     logger.success(f"✅ Limit {side.value} {symbol} immediately filled → oid={oid}")
+                                    
+                                    # Save to DB
+                                    self.db.add_trade(
+                                        symbol=symbol,
+                                        side=side.value.upper(),
+                                        size=float(size),
+                                        price=px,
+                                        leverage=leverage,
+                                        source="live_limit_fill"
+                                    )
                                     return oid
                                 elif "error" in status:
                                     logger.error(f"Order error: {status['error']}")
@@ -415,4 +446,14 @@ class TradeExecutor:
             logger.info(f"🔵 DRY RUN: MARKET {side.value} {symbol} size={size} leverage={leverage}x → {order_id}")
         else:
             logger.info(f"🔵 DRY RUN: LIMIT {side.value} {symbol} size={size} price={price} leverage={leverage}x → {order_id}")
+        
+        # Save simulated trade to DB
+        self.db.add_trade(
+            symbol=symbol,
+            side=side.value.upper(),
+            size=float(size),
+            price=float(price) if price else 0.0,
+            leverage=leverage,
+            source="simulated"
+        )
         return order_id
