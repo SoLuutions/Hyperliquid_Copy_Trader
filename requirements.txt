@@ -16,6 +16,7 @@ python-telegram-bot
 # Database
 sqlalchemy
 alembic
+pg8000
 
 # Utilities
 loguru
