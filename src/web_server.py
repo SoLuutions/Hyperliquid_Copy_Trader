@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import os
 from utils.logger import log_buffer
 
-app = FastAPI(title="Hyperliquid Copy Trader Dashboard")
+app = FastAPI(title="QuantumBytes Copy Trader Dashboard")
 
 # Basic routes for Health Check
 @app.get("/health")

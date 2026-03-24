@@ -815,7 +815,7 @@ async def main():
     trades_copied_count = 0
     
     logger.info("=" * 60)
-    logger.info("🚀 Hyperliquid Copy Trading Bot Starting...")
+    logger.info("🚀 QuantumBytes Copy Trading Bot Starting...")
     logger.info("=" * 60)
     
     if settings.simulated_trading:
