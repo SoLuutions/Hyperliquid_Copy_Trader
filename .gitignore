@@ -50,3 +50,9 @@ config/config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Backtest Data
+all_fills.json
+fills_2025.json
+backtest_results.csv
+Hyperliquid_Backtest_Report.docx
