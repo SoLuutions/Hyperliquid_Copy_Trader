@@ -1,4 +1,5 @@
 """Trade execution engine for Hyperliquid"""
+import asyncio
 import time
 from typing import Optional, Dict, Any
 from decimal import Decimal
