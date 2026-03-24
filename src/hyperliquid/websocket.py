@@ -133,50 +133,44 @@ class HyperliquidWebSocket:
     async def _handle_message(self, message: str):
         """Handle incoming WebSocket message"""
         try:
-            # Log RAW message
-            logger.info(f"📨 RAW WebSocket Message: {message[:500]}...")  # First 500 chars
-            
             data = json.loads(message)
-            
-            # Determine the channel/type of update
             channel = data.get("channel", "unknown")
-            
-            # Log the parsed data
-            logger.info(f"📦 Parsed - Channel: '{channel}', Keys: {list(data.keys())}")
-            
-            # Create update object
+
+            # Suppress noisy pong/subscription confirms at INFO level
+            if channel in ("pong", "subscriptionResponse"):
+                logger.debug(f"WS ctrl: {channel}")
+                return
+
+            logger.debug(f"📨 WS Message: channel='{channel}' | {message[:300]}")
+
             update = WebSocketUpdate(
                 channel=channel,
                 data=data,
                 timestamp=datetime.utcnow()
             )
-            
-            # Call appropriate callback
+
             callback_found = False
             for callback_channel, callback in self.callbacks.items():
-                logger.info(f"🔍 Checking callback: {callback_channel} vs {channel}")
-                
-                # Match logic:
-                # 1. Exact match: channel == callback_channel
-                # 2. Callback is substring of channel: callback_channel in channel
-                # 3. Channel is substring of callback: channel in callback_channel (for "user" matching "user:0x...")
-                # 4. Both start with same prefix before colon (for user:address matching user channel)
                 should_call = False
+
+                # 1. Exact match
                 if channel == callback_channel:
                     should_call = True
+                # 2. Hyperliquid sends "userEvents" for subscriptions registered as "user:0x..."
+                #    So match any callback whose prefix (before ":") starts the channel string.
+                elif ":" in callback_channel:
+                    prefix = callback_channel.split(":")[0]  # e.g. "user"
+                    if channel.startswith(prefix):           # "userEvents".startswith("user") → True
+                        should_call = True
+                # 3. Generic substring fallbacks
                 elif callback_channel in channel:
                     should_call = True
                 elif channel in callback_channel:
                     should_call = True
-                elif ":" in callback_channel:
-                    # Check if channel matches the prefix (e.g., "user" matches "user:0x...")
-                    prefix = callback_channel.split(":")[0]
-                    if channel == prefix:
-                        should_call = True
-                
+
                 if should_call:
                     callback_found = True
-                    logger.info(f"✅ Calling callback for {callback_channel}")
+                    logger.info(f"✅ WS callback matched: channel='{channel}' → '{callback_channel}'")
                     try:
                         if asyncio.iscoroutinefunction(callback):
                             await callback(update)
@@ -186,27 +180,39 @@ class HyperliquidWebSocket:
                         logger.error(f"Error in callback for {callback_channel}: {e}")
                         import traceback
                         logger.error(traceback.format_exc())
-            
+
             if not callback_found:
-                # subscriptionResponse is just a confirmation, not an error
-                if channel == "subscriptionResponse":
-                    logger.debug(f"✅ Subscription confirmed: {data.get('data', {})}")
-                else:
-                    logger.warning(f"⚠️ No callback found for channel: {channel}")
-            
+                logger.warning(f"⚠️ No callback for channel: '{channel}'")
+
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse WebSocket message: {e}")
-            logger.error(f"Raw message: {message}")
+            logger.error(f"Failed to parse WS message: {e} | raw={message[:200]}")
         except Exception as e:
-            logger.error(f"Error handling WebSocket message: {e}")
+            logger.error(f"Error handling WS message: {e}")
             import traceback
             logger.error(traceback.format_exc())
-    
+
+    async def _ping_loop(self):
+        """Send ping every 30s to keep Hyperliquid WebSocket alive.
+        Without this the server closes the connection after ~60s.
+        """
+        while self.is_running:
+            await asyncio.sleep(30)
+            if self.ws and self.is_running:
+                try:
+                    await self.ws.send(json.dumps({"method": "ping"}))
+                    logger.debug("WS ping sent")
+                except Exception as e:
+                    logger.warning(f"Ping failed: {e}")
+
     async def listen(self):
         """
-        Main listening loop for WebSocket messages
-        Automatically reconnects on connection loss
+        Main listening loop for WebSocket messages.
+        Automatically reconnects on connection loss.
+        Starts a background ping loop to keep connection alive.
         """
+        # Start ping loop as a background task
+        ping_task = asyncio.create_task(self._ping_loop())
+
         while self.is_running:
             try:
                 # Handle websockets <14.0 and >=14.0 compatibility
@@ -218,26 +224,28 @@ class HyperliquidWebSocket:
                         is_closed = (self.ws.state.name == "CLOSED")
                     else:
                         is_closed = False
-                        
+
                 if is_closed:
                     await self.connect()
-                
+
                 async for message in self.ws:
                     await self._handle_message(message)
-                    
+
             except websockets.exceptions.ConnectionClosed:
                 logger.warning(f"WebSocket connection closed, reconnecting in {self.reconnect_delay}s...")
                 await asyncio.sleep(self.reconnect_delay)
-                
+
             except Exception as e:
                 logger.error(f"Error in WebSocket listener: {e}")
                 await asyncio.sleep(self.reconnect_delay)
-    
+
+        ping_task.cancel()
+
     async def run(self):
         """Start the WebSocket connection and listening loop"""
         self.is_running = True
         await self.listen()
-    
+
     async def stop(self):
         """Stop the WebSocket connection"""
         self.is_running = False
