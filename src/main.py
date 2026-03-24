@@ -845,6 +845,7 @@ async def main():
         exchange_url=settings.hyperliquid.api_url + "/exchange",
         dry_run=True  # Always start in dry run mode for safety!
     )
+    executor.client = client
     
     if not settings.simulated_trading:
         logger.info(f"\n📊 Fetching your LIVE wallet balance for ratio verification...")
