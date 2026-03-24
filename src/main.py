@@ -1176,6 +1176,7 @@ async def main():
         app.state.status = "ACTIVE"
         app.state.get_uptime = lambda: (datetime.now() - bot_start_time).total_seconds()
         app.state.target_wallet = settings.target_wallet
+        app.state.executor_wallet = "SIMULATED ENVIRONMENT" if settings.simulated_trading else settings.hyperliquid.wallet_address
         app.state.get_trades_count = lambda: trades_copied_count
         app.state.get_simulated_balance = lambda: simulated_balance
         app.state.get_simulated_pnl = lambda: simulated_pnl

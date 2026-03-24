@@ -271,6 +271,10 @@
                 <div class="stat-label">Target Wallet</div>
                 <div class="stat-value" id="valTarget" style="font-size: 16px; line-height: 1.8; color: var(--neon-blue); font-family: monospace;"><div class="skeleton"></div></div>
             </div>
+            <div class="stat-card" style="grid-column: span 2;">
+                <div class="stat-label">Your Wallet</div>
+                <div class="stat-value" id="valExecutor" style="font-size: 16px; line-height: 1.8; color: var(--neon-purple); font-family: monospace;"><div class="skeleton"></div></div>
+            </div>
             <div class="stat-card">
                 <div class="stat-label">Wallet Balance</div>
                 <div class="stat-value" id="valBalance"><div class="skeleton"></div></div>
@@ -336,6 +340,7 @@
                 // Update Stats
                 document.getElementById('valMode').textContent = data.mode;
                 document.getElementById('valTarget').textContent = data.target_wallet;
+                document.getElementById('valExecutor').textContent = data.executor_wallet;
                 document.getElementById('valBalance').textContent = formatCurrency(data.balance);
                 document.getElementById('valTrades').textContent = data.trades_copied;
                 

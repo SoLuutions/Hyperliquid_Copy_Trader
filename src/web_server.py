@@ -22,6 +22,7 @@ def get_status(request: Request):
         "status": getattr(request.app.state, "status", "STARTING"),
         "uptime": getattr(request.app.state, "get_uptime", lambda: 0)(),
         "target_wallet": getattr(request.app.state, "target_wallet", "Unknown"),
+        "executor_wallet": getattr(request.app.state, "executor_wallet", "Unknown"),
         "trades_copied": getattr(request.app.state, "get_trades_count", lambda: 0)(),
         "mode": "SIMULATED" if simulated_trading else "LIVE"
     }
