@@ -873,7 +873,14 @@ async def main():
     logger.info(f"   Open Positions: {len(state.positions)}")
     
     # Auto-calculate ratio based on balances
-    auto_ratio = simulated_balance / target_balance
+    if target_balance < 10:
+        logger.warning(f"⚠️ TARGET BALANCE IS BELOW $10 (${target_balance:,.2f})!")
+        logger.warning("   Auto-calculating ratio on dust balances would cause multi-million dollar leverage bugs.")
+        logger.warning("   Defaulting copy ratio to exactly 1.0 safely.")
+        auto_ratio = 1.0
+    else:
+        auto_ratio = simulated_balance / target_balance
+        
     settings.sizing.portfolio_ratio = auto_ratio
         
     logger.success(f"\n✨ AUTO-CALCULATED SIZING:")
@@ -1177,6 +1184,7 @@ async def main():
         app.state.get_uptime = lambda: (datetime.now() - bot_start_time).total_seconds()
         app.state.target_wallet = settings.target_wallet
         app.state.executor_wallet = "SIMULATED ENVIRONMENT" if settings.simulated_trading else settings.hyperliquid.wallet_address
+        app.state.executor = executor
         app.state.get_trades_count = lambda: trades_copied_count
         app.state.get_simulated_balance = lambda: simulated_balance
         app.state.get_simulated_pnl = lambda: simulated_pnl

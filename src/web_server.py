@@ -11,12 +11,13 @@ def health_check():
     return {"status": "ok"}
 
 @app.get("/api/status")
-def get_status(request: Request):
+async def get_status(request: Request):
     """Returns the live status of the bot, reading from the state injected by main.py"""
     
     # Defaults in case state is missing
     simulated_trading = getattr(request.app.state, "simulated_trading", True)
     monitor = getattr(request.app.state, "monitor", None)
+    executor = getattr(request.app.state, "executor", None)
     
     data = {
         "status": getattr(request.app.state, "status", "STARTING"),
@@ -45,27 +46,33 @@ def get_status(request: Request):
             })
         data["positions"] = pos_list
     else:
-        # LIVE Mode
-        if monitor and monitor.current_state:
-            data["balance"] = monitor.current_state.balance
-            data["pnl"] = monitor.current_state.unrealized_pnl
-            
-            pos_list = []
-            for p in monitor.current_state.positions:
-                pos_list.append({
-                    "symbol": p.symbol,
-                    "size": p.size,
-                    "entry_price": p.entry_price,
-                    "current_price": p.current_price,
-                    "unrealized_pnl": p.unrealized_pnl,
-                    "leverage": p.leverage,
-                    "side": p.side.value.upper()
-                })
-            data["positions"] = pos_list
-        else:
-            data["balance"] = 0
-            data["pnl"] = 0
-            data["positions"] = []
+        # LIVE Mode: Fetch the real executor wallet state directly from the HyperLiquid API
+        data["balance"] = 0
+        data["pnl"] = 0
+        data["positions"] = []
+        
+        if executor and executor.wallet_address:
+            try:
+                state = await executor.client.get_user_state(executor.wallet_address)
+                if state:
+                    data["balance"] = state.balance
+                    data["pnl"] = state.unrealized_pnl
+                    
+                    pos_list = []
+                    for p in state.positions:
+                        pos_list.append({
+                            "symbol": p.symbol,
+                            "size": p.size,
+                            "entry_price": p.entry_price,
+                            "current_price": p.current_price,
+                            "unrealized_pnl": p.unrealized_pnl,
+                            "leverage": p.leverage,
+                            "side": getattr(p.side, 'value', p.side).upper() if p.side else ""
+                        })
+                    data["positions"] = pos_list
+            except Exception as e:
+                # Fallback to zero if API request fails momentarily
+                pass
 
     return data
 
