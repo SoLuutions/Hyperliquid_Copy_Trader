@@ -847,79 +847,92 @@ async def main():
         dry_run=True  # Always start in dry run mode for safety!
     )
     
-    # Fetch target wallet state to auto-calculate ratio
-    logger.info(f"\n📊 Fetching initial state...")
+    # Validate target wallet and fetch initial state
+    logger.info(f"\n📊 Validating target wallet: {target_address}")
+    
+    if not target_address or len(target_address) < 40:
+        logger.error("❌ Invalid target wallet address detected in .env!")
+        logger.error("Bot will exit to prevent blind execution. Please set a valid TARGET_WALLET_ADDRESS.")
+        import sys
+        sys.exit(1)
+        
     state = await monitor.get_current_state()
     
-    if state:
-        target_balance = state.balance
-        logger.info(f"\n💼 Target Account:")
-        logger.info(f"   Balance: ${target_balance:,.2f}")
-        logger.info(f"   Equity: ${state.total_equity:,.2f}")
-        logger.info(f"   Unrealized PnL: ${state.unrealized_pnl:,.2f}")
-        logger.info(f"   Open Positions: {len(state.positions)}")
+    if not state or getattr(state, 'balance', 0) <= 0:
+        logger.error(f"❌ Target wallet {target_address} returned invalid data or $0 balance!")
+        logger.error("Cannot calculate copy ratios safely. The wallet might be invalid, empty, or the Hyperliquid API is unreachable.")
+        logger.error("Bot will exit to protect your funds.")
+        import sys
+        sys.exit(1)
         
-        # Auto-calculate ratio based on balances
-        auto_ratio = simulated_balance / target_balance
-        settings.sizing.portfolio_ratio = auto_ratio
+    target_balance = state.balance
+    logger.info(f"\n💼 Target Account Validated:")
+    logger.info(f"   Balance: ${target_balance:,.2f}")
+    logger.info(f"   Equity: ${state.total_equity:,.2f}")
+    logger.info(f"   Unrealized PnL: ${state.unrealized_pnl:,.2f}")
+    logger.info(f"   Open Positions: {len(state.positions)}")
+    
+    # Auto-calculate ratio based on balances
+    auto_ratio = simulated_balance / target_balance
+    settings.sizing.portfolio_ratio = auto_ratio
         
-        logger.success(f"\n✨ AUTO-CALCULATED SIZING:")
-        logger.success(f"   Target Balance: ${target_balance:,.2f}")
-        logger.success(f"   Your Balance: ${simulated_balance:,.2f}")
-        logger.success(f"   📊 Ratio: 1:{int(1/auto_ratio)} ({auto_ratio*100:.4f}%)")
-        logger.success(f"   This means: For every ${int(1/auto_ratio)} target trades, you copy ${1}")
+    logger.success(f"\n✨ AUTO-CALCULATED SIZING:")
+    logger.success(f"   Target Balance: ${target_balance:,.2f}")
+    logger.success(f"   Your Balance: ${simulated_balance:,.2f}")
+    logger.success(f"   📊 Ratio: 1:{int(1/auto_ratio) if auto_ratio > 0 else 0} ({auto_ratio*100:.4f}%)")
+    logger.success(f"   This means: For every ${int(1/auto_ratio) if auto_ratio > 0 else 0} target trades, you copy ${1}")
+    
+    # Calculate minimum balance needed for $10 minimum order size
+    if state.positions:
+        # Find smallest target position value
+        smallest_target_value = min(abs(pos.size) * pos.entry_price for pos in state.positions)
+        # Calculate minimum balance needed to copy at $10
+        min_balance_needed = MIN_POSITION_SIZE_USD * (target_balance / smallest_target_value) if smallest_target_value > 0 else 0
         
-        # Calculate minimum balance needed for $10 minimum order size
-        if state.positions:
-            # Find smallest target position value
-            smallest_target_value = min(abs(pos.size) * pos.entry_price for pos in state.positions)
-            # Calculate minimum balance needed to copy at $10
-            min_balance_needed = MIN_POSITION_SIZE_USD * (target_balance / smallest_target_value)
-            
-            logger.info(f"\n⚠️  MINIMUM BALANCE CHECK:")
-            logger.info(f"   Hyperliquid Min Order Size: ${MIN_POSITION_SIZE_USD:.2f}")
-            logger.info(f"   Smallest Target Position: ${smallest_target_value:,.2f}")
-            logger.info(f"   Min Balance Needed (for this ratio): ${min_balance_needed:,.2f}")
-            
-            if simulated_balance < min_balance_needed:
-                positions_below_min = sum(1 for pos in state.positions 
-                                         if (abs(pos.size) * pos.entry_price * auto_ratio) < MIN_POSITION_SIZE_USD)
-                logger.warning(f"   ⚠️  WARNING: Your balance ${simulated_balance:,.2f} is below recommended minimum!")
-                logger.warning(f"   {positions_below_min} out of {len(state.positions)} positions will be SKIPPED (below $10)")
-                logger.warning(f"   Consider increasing balance to ${min_balance_needed:,.2f} to copy all positions")
-            else:
-                logger.success(f"   ✅ Your balance is sufficient to copy all positions!")
+        logger.info(f"\n⚠️  MINIMUM BALANCE CHECK:")
+        logger.info(f"   Hyperliquid Min Order Size: ${MIN_POSITION_SIZE_USD:.2f}")
+        logger.info(f"   Smallest Target Position: ${smallest_target_value:,.2f}")
+        logger.info(f"   Min Balance Needed (for this ratio): ${min_balance_needed:,.2f}")
         
-        if state.positions:
-            logger.info(f"\n📊 Current Positions:")
-            logger.info(f"=" * 60)
+        if simulated_balance < min_balance_needed:
+            positions_below_min = sum(1 for pos in state.positions 
+                                     if (abs(pos.size) * pos.entry_price * auto_ratio) < MIN_POSITION_SIZE_USD)
+            logger.warning(f"   ⚠️  WARNING: Your balance ${simulated_balance:,.2f} is below recommended minimum!")
+            logger.warning(f"   {positions_below_min} out of {len(state.positions)} positions will be SKIPPED (below $10)")
+            logger.warning(f"   Consider increasing balance to ${min_balance_needed:,.2f} to copy all positions")
+        else:
+            logger.success(f"   ✅ Your balance is sufficient to copy all positions!")
+    
+    if state.positions:
+        logger.info(f"\n📊 Current Positions:")
+        logger.info(f"=" * 60)
+        
+        total_simulated_margin = 0
+        for i, pos in enumerate(state.positions, 1):
+            target_position_value = abs(pos.size) * pos.entry_price
+            your_position_value = target_position_value * auto_ratio
+            your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
+            your_leverage = calculate_adjusted_leverage(
+                target_leverage=pos.leverage,
+                adjustment_ratio=settings.leverage.adjustment_ratio,
+                symbol=pos.symbol
+            )
+            margin_needed = your_position_value / your_leverage
+            total_simulated_margin += margin_needed
             
-            total_simulated_margin = 0
-            for i, pos in enumerate(state.positions, 1):
-                target_position_value = abs(pos.size) * pos.entry_price
-                your_position_value = target_position_value * auto_ratio
-                your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
-                your_leverage = calculate_adjusted_leverage(
-                    target_leverage=pos.leverage,
-                    adjustment_ratio=settings.leverage.adjustment_ratio,
-                    symbol=pos.symbol
-                )
-                margin_needed = your_position_value / your_leverage
-                total_simulated_margin += margin_needed
-                
-                logger.info(f"\n   Position {i}: {pos.symbol} {pos.side.value.upper()}")
-                logger.info(f"   Target: {pos.size:.4f} @ ${pos.entry_price:,.2f} ({pos.leverage}x)")
-                logger.info(f"   Target Value: ${target_position_value:,.2f}")
-                logger.success(f"   → Your Copy: {your_size:.4f} @ ${pos.entry_price:,.2f} ({your_leverage}x)")
-                logger.success(f"   → Your Value: ${your_position_value:,.2f}")
-                logger.success(f"   → Margin Needed: ${margin_needed:,.2f}")
-            
-            logger.info(f"\n" + "=" * 60)
-            logger.warning(f"📊 If you copied all {len(state.positions)} positions:")
-            logger.warning(f"   Total Margin Needed: ${total_simulated_margin:,.2f}")
-            logger.warning(f"   Your Balance: ${simulated_balance:,.2f}")
-            logger.warning(f"   Remaining: ${simulated_balance - total_simulated_margin:,.2f}")
-            logger.info(f"=" * 60)
+            logger.info(f"\n   Position {i}: {pos.symbol} {pos.side.value.upper()}")
+            logger.info(f"   Target: {pos.size:.4f} @ ${pos.entry_price:,.2f} ({pos.leverage}x)")
+            logger.info(f"   Target Value: ${target_position_value:,.2f}")
+            logger.success(f"   → Your Copy: {your_size:.4f} @ ${pos.entry_price:,.2f} ({your_leverage}x)")
+            logger.success(f"   → Your Value: ${your_position_value:,.2f}")
+            logger.success(f"   → Margin Needed: ${margin_needed:,.2f}")
+        
+        logger.info(f"\n" + "=" * 60)
+        logger.warning(f"📊 If you copied all {len(state.positions)} positions:")
+        logger.warning(f"   Total Margin Needed: ${total_simulated_margin:,.2f}")
+        logger.warning(f"   Your Balance: ${simulated_balance:,.2f}")
+        logger.warning(f"   Remaining: ${simulated_balance - total_simulated_margin:,.2f}")
+        logger.info(f"=" * 60)
     
     logger.info(f"\n🔧 Copy Trading Settings:")
     logger.info(f"   Sizing Mode: {settings.sizing.mode}")
