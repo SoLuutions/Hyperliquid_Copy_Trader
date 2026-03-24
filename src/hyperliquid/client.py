@@ -95,14 +95,22 @@ class HyperliquidClient:
                         trigger_price=float(order.get("triggerPx", 0)) if order.get("triggerPx") else None
                     ))
             
-            # Parse account balance - check top level first, then margin summaries
+            # Parse account balance - check top level, cross margin, and then isolated margin summaries
+            # Most users use Cross Margin on Hyperliquid!
             balance = float(response.get("accountValue", 0))
             if balance == 0:
-                # Fallback to isolated margin summary if top-level is 0
+                # Check Cross Margin Summary (Standard for most users)
+                balance = float(response.get("crossMarginSummary", {}).get("accountValue", 0))
+            if balance == 0:
+                # Fallback to Isolated Margin Summary
                 balance = float(response.get("marginSummary", {}).get("accountValue", 0))
             
-            margin_used = float(response.get("marginSummary", {}).get("totalMarginUsed", 0))
-            unrealized_pnl = float(response.get("marginSummary", {}).get("totalNtlPos", 0))
+            # Additional fallback for withdrawable cash (just in case they have no positions/margin history)
+            if balance == 0:
+                balance = float(response.get("withdrawable", 0))
+            
+            margin_used = float(response.get("marginSummary", {}).get("totalMarginUsed", 0)) or float(response.get("crossMarginSummary", {}).get("totalMarginUsed", 0))
+            unrealized_pnl = float(response.get("marginSummary", {}).get("totalNtlPos", 0)) or float(response.get("crossMarginSummary", {}).get("totalNtlPos", 0))
             
             from datetime import datetime
             return UserState(
