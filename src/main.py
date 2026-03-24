@@ -814,18 +814,17 @@ async def main():
     bot_start_time = datetime.now()
     trades_copied_count = 0
     
-    # Initialize simulated account
-    simulated_balance = settings.simulated_account_balance
-    
     logger.info("=" * 60)
     logger.info("🚀 Hyperliquid Copy Trading Bot Starting...")
     logger.info("=" * 60)
     
     if settings.simulated_trading:
         logger.warning("🎮 SIMULATED TRADING MODE")
+        simulated_balance = settings.simulated_account_balance
         logger.warning(f"💰 Simulated Account Balance: ${simulated_balance:,.2f}")
     else:
         logger.warning("⚠️ LIVE TRADING MODE - REAL MONEY AT RISK!")
+        simulated_balance = 0  # Will be dynamically fetched below
     
     target_address = settings.target_wallet
     logger.info(f"📍 Target Address: {target_address}")
@@ -847,6 +846,22 @@ async def main():
         dry_run=True  # Always start in dry run mode for safety!
     )
     
+    if not settings.simulated_trading:
+        logger.info(f"\n📊 Fetching your LIVE wallet balance for ratio verification...")
+        try:
+            executor_state = await executor.client.get_user_state(executor.wallet_address)
+            if executor_state and getattr(executor_state, 'balance', 0) > 0:
+                simulated_balance = executor_state.balance
+            else:
+                logger.error(f"❌ Your LIVE wallet {executor.wallet_address} has $0 balance or is invalid!")
+                logger.error("You must deposit USDC to your Hyperliquid account to trade live.")
+                import sys
+                sys.exit(1)
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch your live wallet balance: {e}")
+            import sys
+            sys.exit(1)
+            
     # Validate target wallet and fetch initial state
     logger.info(f"\n📊 Validating target wallet: {target_address}")
     
