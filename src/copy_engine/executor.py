@@ -64,6 +64,11 @@ class TradeExecutor:
         # Load asset mapping asynchronously
         if not self.dry_run:
             asyncio.create_task(self._load_coin_map())
+
+    @property
+    def wallet_address(self):
+        """Compatibility property for legacy code"""
+        return self.executor_address
     
     async def _load_coin_map(self):
         """Fetch universe metadata to map symbols to asset IDs"""
@@ -412,7 +417,7 @@ class TradeExecutor:
             action = {
                 "type": "cancel",
                 "cancels": [{
-                    "a": self.wallet_address,
+                    "a": self.executor_address,
                     "o": order_id
                 }]
             }

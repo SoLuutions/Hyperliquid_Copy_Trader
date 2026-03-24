@@ -57,9 +57,9 @@ async def get_status(request: Request):
         data["pnl"] = 0
         data["positions"] = []
         
-        if executor and executor.wallet_address:
+        if executor and executor.executor_address:
             try:
-                state = await executor.client.get_user_state(executor.wallet_address)
+                state = await executor.client.get_user_state(executor.executor_address)
                 if state:
                     data["balance"] = state.balance
                     data["pnl"] = state.unrealized_pnl
