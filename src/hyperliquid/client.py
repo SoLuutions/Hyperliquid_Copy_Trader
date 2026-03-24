@@ -95,8 +95,12 @@ class HyperliquidClient:
                         trigger_price=float(order.get("triggerPx", 0)) if order.get("triggerPx") else None
                     ))
             
-            # Parse account balance
-            balance = float(response.get("marginSummary", {}).get("accountValue", 0))
+            # Parse account balance - check top level first, then margin summaries
+            balance = float(response.get("accountValue", 0))
+            if balance == 0:
+                # Fallback to isolated margin summary if top-level is 0
+                balance = float(response.get("marginSummary", {}).get("accountValue", 0))
+            
             margin_used = float(response.get("marginSummary", {}).get("totalMarginUsed", 0))
             unrealized_pnl = float(response.get("marginSummary", {}).get("totalNtlPos", 0))
             
