@@ -12,8 +12,9 @@ from telegram_bot import TelegramBot, NotificationService
 # Setup logging
 setup_logger(settings.log_file, settings.log_level)
 
-# Hyperliquid minimum order size requirement
-MIN_POSITION_SIZE_USD = 10.0
+# Hyperliquid minimum order size requirement (~$1 notional)
+MIN_POSITION_SIZE_USD = 1.0
+
 
 # Initialize components
 monitor: WalletMonitor = None
@@ -935,8 +936,13 @@ async def main():
         total_simulated_margin = 0
         for i, pos in enumerate(state.positions, 1):
             target_position_value = abs(pos.size) * pos.entry_price
-            your_position_value = target_position_value * auto_ratio
-            your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
+            # Use fixed or proportional sizing for the preview
+            if settings.sizing.mode == "fixed":
+                your_position_value = min(settings.sizing.fixed_size, settings.sizing.max_position_size)
+                your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
+            else:
+                your_position_value = target_position_value * auto_ratio
+                your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
             your_leverage = calculate_adjusted_leverage(
                 target_leverage=pos.leverage,
                 adjustment_ratio=settings.leverage.adjustment_ratio,
@@ -988,10 +994,17 @@ async def main():
         copied_count = 0
         for i, pos in enumerate(state.positions, 1):
             try:
-                # Calculate your copy
+                # Calculate your copy size (respect fixed vs proportional mode)
                 target_position_value = abs(pos.size) * pos.entry_price
-                your_position_value = target_position_value * auto_ratio
-                your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
+                if settings.sizing.mode == "fixed":
+                    your_position_value = min(settings.sizing.fixed_size, settings.sizing.max_position_size)
+                    your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
+                else:
+                    your_position_value = target_position_value * auto_ratio
+                    # Cap proportional size at max_position_size
+                    if your_position_value > settings.sizing.max_position_size:
+                        your_position_value = settings.sizing.max_position_size
+                    your_size = your_position_value / pos.entry_price if pos.entry_price > 0 else 0
                 your_leverage = calculate_adjusted_leverage(
                     target_leverage=pos.leverage,
                     adjustment_ratio=settings.leverage.adjustment_ratio,

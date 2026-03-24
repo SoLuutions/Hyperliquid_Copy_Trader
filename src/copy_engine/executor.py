@@ -138,9 +138,9 @@ class TradeExecutor:
         try:
             action = {
                 "type": "updateLeverage",
-                "asset": symbol,
+                "asset": symbol,          # coin ticker, e.g. "BTC"
                 "isCross": is_cross,
-                "leverage": leverage
+                "leverage": int(leverage)  # must be integer
             }
             
             signed_action = self._sign_action(action)
@@ -198,17 +198,17 @@ class TradeExecutor:
             if leverage > 1:
                 await self._update_leverage(symbol, leverage)
             
-            # Create market order action (price 0 = market order)
+            # Create market order action
+            # Hyperliquid wire format: a=coin, b=isBuy, p=price, s=size, r=reduceOnly, t=orderType
             action = {
                 "type": "order",
                 "orders": [{
-                    "a": self.wallet_address,
+                    "a": symbol,
                     "b": side == OrderSide.BUY,
-                    "p": "0",  # 0 = market order
-                    "s": str(float(size)),
+                    "p": "0",  # 0 = market order price (IOC)
+                    "s": str(round(float(size), 8)),
                     "r": reduce_only,
-                    "t": {"limit": {"tif": "Ioc"}},  # Immediate or Cancel
-                    "c": symbol
+                    "t": {"limit": {"tif": "Ioc"}}
                 }],
                 "grouping": "na"
             }
@@ -281,18 +281,17 @@ class TradeExecutor:
                 await self._update_leverage(symbol, leverage)
             
             # Create limit order action
-            tif = "Alo" if post_only else "Gtc"  # Alo = Add Liquidity Only, Gtc = Good Till Cancel
-            
+            # Hyperliquid wire format: a=coin, b=isBuy, p=price, s=size, r=reduceOnly, t=orderType
+            tif = "Alo" if post_only else "Gtc"
             action = {
                 "type": "order",
                 "orders": [{
-                    "a": self.wallet_address,
+                    "a": symbol,
                     "b": side == OrderSide.BUY,
-                    "p": str(float(price)),
-                    "s": str(float(size)),
+                    "p": str(round(float(price), 8)),
+                    "s": str(round(float(size), 8)),
                     "r": reduce_only,
-                    "t": {"limit": {"tif": tif}},
-                    "c": symbol
+                    "t": {"limit": {"tif": tif}}
                 }],
                 "grouping": "na"
             }
