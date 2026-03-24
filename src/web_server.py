@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import os
+from utils.logger import log_buffer
 
 app = FastAPI(title="Hyperliquid Copy Trader Dashboard")
 
@@ -9,6 +10,11 @@ app = FastAPI(title="Hyperliquid Copy Trader Dashboard")
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/api/logs")
+def get_logs():
+    """Returns the rolling CLI log cache from loguru"""
+    return {"logs": list(log_buffer)}
 
 @app.get("/api/status")
 async def get_status(request: Request):

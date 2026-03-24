@@ -41,8 +41,7 @@ class CopyRulesConfig(BaseModel):
     max_account_equity: Optional[float] = None  # None = unlimited
     min_entry_quality_pct: float = 5.0
     max_slippage_pct: float = 1.0
-    min_position_size_usd: float = 10.0
-    blocked_assets: list[str] = []  # Assets to NOT copy (e.g., ["BTC", "ETH"])
+    allowed_assets: list[str] = ["BTC", "ETH", "SOL"]  # Assets to exclusively copy (empty list means copy ALL)
 
 class RiskManagementConfig(BaseModel):
     max_concurrent_positions: int = 10
@@ -120,10 +119,10 @@ class Settings(BaseModel):
         max_equity = os.getenv('MAX_ACCOUNT_EQUITY', 'x')
         settings.copy_rules.max_account_equity = None if not max_equity or max_equity.lower() == 'x' else float(max_equity)
         
-        # Blocked assets
-        blocked = os.getenv('BLOCKED_ASSETS', '')
-        settings.copy_rules.blocked_assets = [
-            asset.strip().upper() for asset in blocked.split(',') if asset.strip()
+        # Allowed assets
+        allowed = os.getenv('ALLOWED_ASSETS', 'BTC,ETH,SOL')
+        settings.copy_rules.allowed_assets = [
+            asset.strip().upper() for asset in allowed.split(',') if asset.strip()
         ]
         
         settings.telegram.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')

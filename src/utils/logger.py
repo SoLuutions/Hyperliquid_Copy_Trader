@@ -1,6 +1,13 @@
 import sys
+import collections
 from pathlib import Path
 from loguru import logger
+
+# Global log buffer for Web UI
+log_buffer = collections.deque(maxlen=200)
+
+def custom_sink(message):
+    log_buffer.append(message.strip())
 
 def setup_logger(log_file: str = "./logs/trading.log", log_level: str = "INFO"):
     """
@@ -29,6 +36,14 @@ def setup_logger(log_file: str = "./logs/trading.log", log_level: str = "INFO"):
         rotation="100 MB",
         retention="30 days",
         compression="zip"
+    )
+    
+    # Add memory sink for UI
+    logger.add(
+        custom_sink,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function} - {message}",
+        level=log_level,
+        colorize=False
     )
     
     return logger

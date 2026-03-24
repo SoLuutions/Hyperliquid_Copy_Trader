@@ -110,10 +110,10 @@ class WalletMonitor:
             # Extract symbol from fill data
             symbol = fill.get("coin", "").upper()
             
-            # Check if asset is blocked
+            # Check if asset is allowed
             from config.settings import settings
-            if symbol in settings.copy_rules.blocked_assets:
-                logger.warning(f"⛔ BLOCKED ASSET - Ignoring fill for {symbol} (in blocked list)")
+            if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
+                logger.warning(f"⛔ ALLOWED LIST ONLY - Ignoring fill for {symbol} (not in allowed list)")
                 continue
             
             logger.success(f"🎯 FILL DETECTED: {fill}")
@@ -138,9 +138,9 @@ class WalletMonitor:
             symbol = pos_data.get("coin", "").upper()
             size = float(pos_data.get("szi", 0))
             
-            # Check if asset is blocked
-            if symbol in settings.copy_rules.blocked_assets:
-                logger.debug(f"⛔ Ignoring position update for blocked asset: {symbol}")
+            # Check if asset is allowed
+            if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
+                logger.debug(f"⛔ Ignoring position update for non-whitelisted asset: {symbol}")
                 continue
             
             # Check if this is a new position
