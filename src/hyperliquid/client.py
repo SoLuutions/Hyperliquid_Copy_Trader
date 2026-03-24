@@ -77,6 +77,7 @@ class HyperliquidClient:
                             liquidation_price=float(position.get("liquidationPx")) if position.get("liquidationPx") else None,
                             margin=float(position.get("marginUsed", 0))
                         ))
+                        logger.debug(f"  Position: {pos_data.get('coin')} unrealizedPnl={position.get('unrealizedPnl', 0)}")
             
             # Parse orders
             orders = []
@@ -110,7 +111,14 @@ class HyperliquidClient:
                 balance = float(response.get("withdrawable", 0))
             
             margin_used = float(response.get("marginSummary", {}).get("totalMarginUsed", 0)) or float(response.get("crossMarginSummary", {}).get("totalMarginUsed", 0))
-            unrealized_pnl = float(response.get("marginSummary", {}).get("totalNtlPos", 0)) or float(response.get("crossMarginSummary", {}).get("totalNtlPos", 0))
+            # totalNtlPos is the total *notional* (size × price) — NOT the PnL.
+            # totalUnrealizedPnl / totalRawUsd is the actual unrealized profit/loss.
+            unrealized_pnl = (
+                float(response.get("marginSummary", {}).get("totalUnrealizedPnl", 0))
+                or float(response.get("crossMarginSummary", {}).get("totalUnrealizedPnl", 0))
+                # Fallback: sum per-position unrealized PnL
+                or sum(float(p.unrealized_pnl) for p in positions)
+            )
             
             from datetime import datetime
             return UserState(

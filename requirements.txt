@@ -6,7 +6,9 @@ requests
 
 # Ethereum/Web3
 eth-account
+eth-utils
 web3
+msgpack
 
 # Telegram bot
 python-telegram-bot

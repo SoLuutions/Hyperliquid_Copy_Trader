@@ -1,5 +1,5 @@
 import asyncio
-from typing import Callable, Optional, List
+from typing import Callable, Optional, List, Dict
 from loguru import logger
 from hyperliquid.client import HyperliquidClient
 from hyperliquid.websocket import HyperliquidWebSocket

@@ -36,25 +36,6 @@ class PositionSizer:
     
     def calculate_size(
         self,
-        target_position: Position,
-        target_wallet_balance: float,
-        your_wallet_balance: float,
-        your_current_exposure: float = 0.0
-    ) -> Optional[float]:
-        """
-        Calculate the appropriate position size to copy
-        
-        Args:
-            target_position: The position from target wallet
-            target_wallet_balance: Target wallet's total balance
-            your_wallet_balance: Your wallet's balance
-            your_current_exposure: Your current total exposure
-            
-        Returns:
-            Position size to trade, or None if should skip
-        """
-    def calculate_size(
-        self,
         target_position: Optional[Position],
         target_wallet_balance: float,
         your_wallet_balance: float,

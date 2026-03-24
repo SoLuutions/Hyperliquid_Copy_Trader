@@ -41,7 +41,7 @@ class CopyRulesConfig(BaseModel):
     max_account_equity: Optional[float] = None  # None = unlimited
     min_entry_quality_pct: float = 5.0
     max_slippage_pct: float = 1.0
-    allowed_assets: list[str] = ["BTC", "ETH", "SOL"]  # Assets to exclusively copy (empty list means copy ALL)
+    allowed_assets: list[str] = []  # Assets to exclusively copy (empty list means copy ALL)
     blocked_assets: list[str] = []  # Assets to EXCLUDE from copying (takes priority over allowed)
 
 class RiskManagementConfig(BaseModel):

@@ -368,17 +368,18 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Asset</th>
+                            <th>Coin</th>
                             <th>Side</th>
                             <th>Size</th>
                             <th>Entry Price</th>
+                            <th>Current Price</th>
                             <th>Margin / Value</th>
                             <th>PnL</th>
                         </tr>
                     </thead>
                     <tbody id="positionsTable">
                         <tr>
-                            <td colspan="6">
+                            <td colspan="7">
                                 <div class="empty-state">Loading positions...</div>
                             </td>
                         </tr>
@@ -434,22 +435,29 @@
                 document.getElementById('posCount').textContent = data.positions.length;
                 
                 if (data.positions.length === 0) {
-                    table.innerHTML = '<tr><td colspan="6"><div class="empty-state">No open positions right now.</div></td></tr>';
+                    table.innerHTML = '<tr><td colspan="7"><div class="empty-state">No open positions right now.</div></td></tr>';
                 } else {
                     let html = '';
                     data.positions.forEach(p => {
-                        const sideClass = p.side.toUpperCase() === 'LONG' ? 'side-long' : 'side-short';
-                        const pnlVal = p.unrealized_pnl || 0;
-                        const pnlColor = pnlVal > 0 ? 'var(--neon-green)' : (pnlVal < 0 ? 'var(--neon-red)' : 'var(--text-main)');
-                        const notional = Math.abs(p.size) * p.entry_price;
+                        const sideClass = (p.side || '').toUpperCase() === 'LONG' ? 'side-long' : 'side-short';
+                        const pnlVal = p.unrealized_pnl !== undefined ? p.unrealized_pnl : 0;
+                        const pnlColor = pnlVal > 0 ? 'var(--neon-green)' : (pnlVal < 0 ? 'var(--neon-red)' : 'var(--text-muted)');
+                        const notional = Math.abs(p.size || 0) * (p.entry_price || 0);
+                        const margin = p.margin || (p.leverage > 0 ? notional / p.leverage : notional);
+                        const currentPrice = p.current_price || p.entry_price || 0;
+                        const coin = p.symbol || '—';
                         
                         html += `
                             <tr>
-                                <td style="font-weight:700;">${p.symbol} <span style="font-size:11px;color:var(--text-muted)">${p.leverage}x</span></td>
-                                <td><span class="${sideClass}">${p.side.toUpperCase()}</span></td>
-                                <td>${Math.abs(p.size).toFixed(4)}</td>
-                                <td>${formatCurrency(p.entry_price)}</td>
-                                <td>${formatCurrency(p.margin || (notional / p.leverage))}</td>
+                                <td style="font-weight:800; color:var(--neon-blue); font-size:16px; letter-spacing:0.5px;">
+                                    ${coin}
+                                    <span style="font-size:11px; color:var(--text-muted); font-weight:500; margin-left:4px;">${p.leverage}x</span>
+                                </td>
+                                <td><span class="${sideClass}">${(p.side || '').toUpperCase()}</span></td>
+                                <td>${Math.abs(p.size || 0).toFixed(4)}</td>
+                                <td>${formatCurrency(p.entry_price || 0)}</td>
+                                <td style="color:var(--text-muted);">${currentPrice > 0 ? formatCurrency(currentPrice) : '—'}</td>
+                                <td>${formatCurrency(margin)}</td>
                                 <td style="color:${pnlColor}; font-weight:600;">${formatCurrency(pnlVal)}</td>
                             </tr>
                         `;
