@@ -42,6 +42,7 @@ class CopyRulesConfig(BaseModel):
     min_entry_quality_pct: float = 5.0
     max_slippage_pct: float = 1.0
     allowed_assets: list[str] = ["BTC", "ETH", "SOL"]  # Assets to exclusively copy (empty list means copy ALL)
+    blocked_assets: list[str] = []  # Assets to EXCLUDE from copying (takes priority over allowed)
 
 class RiskManagementConfig(BaseModel):
     max_concurrent_positions: int = 10
@@ -135,7 +136,11 @@ class Settings(BaseModel):
         # Allowed assets
         allowed = os.getenv('ALLOWED_ASSETS', 'BTC,ETH,SOL')
         settings.copy_rules.allowed_assets = [
-            asset.strip().upper() for asset in allowed.split(',') if asset.strip()
+            a.strip().upper() for a in os.getenv("ALLOWED_ASSETS", "").split(",") if a.strip()
+        ]
+        
+        settings.copy_rules.blocked_assets = [
+            a.strip().upper() for a in os.getenv("BLOCKED_ASSETS", "").split(",") if a.strip()
         ]
         
         settings.telegram.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')

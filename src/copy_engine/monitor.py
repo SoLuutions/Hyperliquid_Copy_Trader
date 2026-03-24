@@ -110,8 +110,12 @@ class WalletMonitor:
             # Extract symbol from fill data
             symbol = fill.get("coin", "").upper()
             
-            # Check if asset is allowed
+            # Check if asset is blocked or allowed
             from config.settings import settings
+            if settings.copy_rules.blocked_assets and symbol in settings.copy_rules.blocked_assets:
+                logger.log("TRACK", f"🚫 Target traded BLOCKED asset {symbol} (Skipping)")
+                continue
+                
             if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
                 logger.log("TRACK", f"🐋 Target traded {symbol} (Skipped: Not in allowed list)")
                 continue
@@ -138,7 +142,11 @@ class WalletMonitor:
             symbol = pos_data.get("coin", "").upper()
             size = float(pos_data.get("szi", 0))
             
-            # Check if asset is allowed
+            # Check if asset is blocked or allowed
+            if settings.copy_rules.blocked_assets and symbol in settings.copy_rules.blocked_assets:
+                logger.log("TRACK", f"🚫 Target position update: BLOCKED asset {symbol} (Skipping)")
+                continue
+                
             if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
                 logger.log("TRACK", f"🐋 Target position update: {symbol} (Skipped: Not in allowed list)")
                 continue
@@ -194,7 +202,17 @@ class WalletMonitor:
         
         for order_data in orders:
             order_id = str(order_data.get("oid", ""))
-            symbol = order_data.get("coin", "")
+            symbol = order_data.get("coin", "").upper()
+            
+            # Check if asset is blocked or allowed
+            from config.settings import settings
+            if settings.copy_rules.blocked_assets and symbol in settings.copy_rules.blocked_assets:
+                logger.log("TRACK", f"🚫 Target order: BLOCKED asset {symbol} (Skipping)")
+                continue
+                
+            if settings.copy_rules.allowed_assets and symbol not in settings.copy_rules.allowed_assets:
+                logger.log("TRACK", f"🐋 Target order: {symbol} (Skipped: Not in allowed list)")
+                continue
             
             # Check if new order
             existing = next((o for o in self.last_orders if o.order_id == order_id), None)
