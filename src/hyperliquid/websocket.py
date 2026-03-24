@@ -209,7 +209,17 @@ class HyperliquidWebSocket:
         """
         while self.is_running:
             try:
-                if not self.ws or self.ws.closed:
+                # Handle websockets <14.0 and >=14.0 compatibility
+                is_closed = True
+                if self.ws:
+                    if hasattr(self.ws, "closed"):
+                        is_closed = self.ws.closed
+                    elif hasattr(self.ws, "state"):
+                        is_closed = (self.ws.state.name == "CLOSED")
+                    else:
+                        is_closed = False
+                        
+                if is_closed:
                     await self.connect()
                 
                 async for message in self.ws:
